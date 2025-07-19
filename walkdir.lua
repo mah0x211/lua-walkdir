@@ -141,7 +141,7 @@ end
 --- Callback function for each directory entry.
 --- If the callback returns `false` when `isdir` is `true`, the directory
 --- will not be traversed further.
---- @alias walkdir.walkerfn fun(pathname:string, entry:string, isdir:boolean):(allowdir:boolean)
+--- @alias walkdir.walkerfn fun(pathname:string, entry:string, isdir:boolean):(skipdir:boolean, err:any)
 
 --- walk directory with a walker function
 --- @param ctx walkdir.context
@@ -158,11 +158,16 @@ local function walkdir_with_walkerfn(ctx, walkerfn)
 
         -- call the walker function with the current entry
         ---@diagnostic disable-next-line: param-type-mismatch
-        local allowdir = walkerfn(pathname, entry, is_dir)
+        local skipdir
+        skipdir, err = walkerfn(pathname, entry, is_dir)
+        if err then
+            -- if the walker function returns an error, return it
+            return errorf('walkerfn failed for %s', pathname, err)
+        end
 
         -- if the walker function returns false for a directory,
         -- do not traverse it further and remove it from the stack
-        if is_dir and allowdir == false then
+        if is_dir and skipdir == true then
             ctx.dirs[#ctx.dirs] = nil
         end
 
