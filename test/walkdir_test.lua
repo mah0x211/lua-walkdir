@@ -127,6 +127,35 @@ function testcase.with_generic_for_loop()
     assert.empty(entries)
 end
 
+function testcase.with_walkerfn()
+    local entries = copy_entries()
+
+    -- test that walkdir with walker function
+    local skipdir = './testdir/foo/bar/baz/qux'
+    local err = walkdir('./testdir', true, function(pathname, entry, is_dir)
+        assert.is_string(pathname)
+        assert.is_string(entry)
+        assert.is_boolean(is_dir)
+        if pathname == skipdir then
+            return false -- skip skipdir
+        end
+        -- remove pathname
+        entries[pathname] = nil
+        return true
+    end)
+    assert.is_nil(err)
+
+    -- confirm that the skipped directory is exists
+    for pathname in pairs(entries) do
+        local basedir = string.sub(pathname, 1, #skipdir)
+        assert.equal(basedir, skipdir)
+    end
+
+    -- test that throws error when walkerfn is not a function
+    err = assert.throws(walkdir, './testdir', true, 123)
+    assert.match(err, 'walkerfn must be a function, got number')
+end
+
 function testcase.double_slashes_converted_to_single_slash()
     -- test that walkdir normalizes double slashes in pathname
     local iter, ctx = walkdir('./testdir//foo//bar')

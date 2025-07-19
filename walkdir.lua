@@ -118,6 +118,7 @@ local function read_next_entry(ctx)
             local pathname = ctx.pathname .. '/' .. entry
             local is_dir = isdir(pathname, ctx.follow_symlink)
             if is_dir then
+                -- if the entry is a directory, add it to the stack
                 ctx.dirs[#ctx.dirs + 1] = pathname
             end
             return pathname, entry, is_dir
@@ -137,17 +138,57 @@ local function read_next_entry(ctx)
     return read_next_entry(ctx)
 end
 
+--- Callback function for each directory entry.
+--- If the callback returns `false` when `isdir` is `true`, the directory
+--- will not be traversed further.
+--- @alias walkdir.walkerfn fun(pathname:string, entry:string, isdir:boolean):(allowdir:boolean)
+
+--- walk directory with a walker function
+--- @param ctx walkdir.context
+--- @param walkerfn walkdir.walkerfn
+--- @return any err
+local function walkdir_with_walkerfn(ctx, walkerfn)
+    -- create a context with the walker
+    local pathname, entry, is_dir, err = read_next_entry(ctx)
+    while pathname do
+        if err then
+            -- if an error occurred, return it
+            return err
+        end
+
+        -- call the walker function with the current entry
+        ---@diagnostic disable-next-line: param-type-mismatch
+        local allowdir = walkerfn(pathname, entry, is_dir)
+
+        -- if the walker function returns false for a directory,
+        -- do not traverse it further and remove it from the stack
+        if is_dir and allowdir == false then
+            ctx.dirs[#ctx.dirs] = nil
+        end
+
+        -- read next entry
+        pathname, entry, is_dir, err = read_next_entry(ctx)
+    end
+
+    return err
+end
+
+--- @alias walkdir.iterator fun(ctx:walkdir.context):(pathname:string?, entry:string?, isdir:boolean?, err:any)
+
 --- walk directory recursively
 --- @param pathname string
 --- @param follow_symlink boolean?
---- @return fun(ctx:walkdir.context):(string?, any)
---- @return walkdir.context
-local function walkdir(pathname, follow_symlink)
+--- @param walkerfn walkdir.walkerfn?
+--- @return walkdir.iterator|any
+--- @return walkdir.context?
+local function walkdir(pathname, follow_symlink, walkerfn)
     if type(pathname) ~= 'string' or find(pathname, '^%s*$') then
         fatalf(2, 'pathname must be a non-empty string, got %s', type(pathname))
     elseif follow_symlink ~= nil and type(follow_symlink) ~= 'boolean' then
         fatalf(2, 'follow_symlink must be a boolean, got %s',
                type(follow_symlink))
+    elseif walkerfn ~= nil and type(walkerfn) ~= 'function' then
+        fatalf(2, 'walkerfn must be a function, got %s', type(walkerfn))
     end
 
     -- remove double slashes and trailing slashes
@@ -156,13 +197,21 @@ local function walkdir(pathname, follow_symlink)
         pathname = pathname:sub(1, -2)
     end
 
-    -- return iterator function and context
-    return read_next_entry, {
+    -- create context
+    local ctx = {
         dirs = {
             pathname,
         },
         follow_symlink = follow_symlink == true,
     }
+
+    if walkerfn then
+        -- if walkerfn is provided, use it to callback for each entry, and
+        -- return the error of walkdir_with_walker function
+        return walkdir_with_walkerfn(ctx, walkerfn)
+    end
+    -- return iterator function and context
+    return read_next_entry, ctx
 end
 
 return walkdir

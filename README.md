@@ -27,7 +27,7 @@ end
 the following functions return the `error` object created by https://github.com/mah0x211/lua-errno module.
 
 
-## iter, ctx = walkdir( pathname [, follow_symlink] )
+## iter, ctx = walkdir( pathname [, follow_symlink]] )
 
 Get an iterator function and context for traversing a specified directory.
 
@@ -83,4 +83,49 @@ for pathname, entry, isdir, err in walkdir('/tmp', true) do
     end
 end
 ```
+
+## err = walkdir( pathname [, follow_symlink [, walkerfn]] )
+
+If `walkerfn` is provided, the function will traverse the directory and call the `walkerfn` for each entry.
+
+**Parameters**
+
+- `pathname:string`: the directory to traverse.
+- `follow_symlink:boolean`: follow symbolic links. (default: `false`)
+- `walkerfn:function`: a function that will be called for each entry in the directory.
+    ```
+    walkerfn(pathname:string, entry:string, isdir:boolean):(allowdir:boolean)
+
+    * pathname: the entry's pathname.
+    * entry: the entry's name.
+    * isdir: whether the entry is a directory.
+    * allowdir: If `false`, the directory will not be traversed further, otherwise it will be traversed.
+    ```
+
+**Returns**
+
+- `err:any`: an error object if an error occurred during traversal. If no error occurred, it returns `nil`.
+
+**Example**
+
+the following example shows how to use the `walkdir` function to traverse a directory and call a `walkerfn` for each entry:
+
+```lua
+local walkdir = require('walkdir')
+
+-- traverse a /tmp directory and call the walker function for each entry
+local err = walkdir('/tmp', true, function(pathname, entry, isdir)
+    print(pathname, entry, isdir)
+    -- if the entry is a directory, return true to traverse it further
+    if isdir then
+        return true
+    end
+    -- if the entry is a file, return false to not traverse it further
+    return false
+end)
+if err then
+    print('Error:', err)
+end
+```
+
 
