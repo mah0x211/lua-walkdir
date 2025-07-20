@@ -65,13 +65,18 @@ end
 
 function testcase.call_iterator_function()
     -- test that walkdir returns an iterator function and context
-    local iter, ctx, initval = walkdir('./testdir')
+    local rootdir = './testdir'
+    local iter, ctx, initval = walkdir(rootdir)
     assert.is_func(iter)
     assert.is_table(ctx, {
         pathname = nil,
+        depth = nil,
         follow_symlink = true,
         dirs = {
             './testdir',
+        },
+        depths = {
+            1,
         },
         dir = nil,
         error = nil,
@@ -80,21 +85,26 @@ function testcase.call_iterator_function()
 
     -- test that the iterator function returns entries in the directory
     local entries = copy_entries()
-    local pathname, err, entry, is_dir = iter(ctx)
+    local pathname, err, entry, is_dir, depth = iter(ctx)
     while pathname do
         assert.is_string(pathname)
+        assert.is_nil(err)
         assert.is_string(entry)
         assert.is_boolean(is_dir)
-        assert.is_nil(err)
+        assert.is_int(depth)
         -- confirm that the entry is last part of pathname
         assert.equal(pathname:match('([^/]+)$'), entry)
+
+        -- confirm that the depth is correct
+        local _, count = pathname:sub(#rootdir + 1):gsub('/', '')
+        assert.equal(depth, count)
 
         -- confirm that the entry is in the expected entries
         assert.equal(entries[pathname], is_dir)
         entries[pathname] = nil
 
         -- get next entry
-        pathname, err, entry, is_dir = iter(ctx)
+        pathname, err, entry, is_dir, depth = iter(ctx)
     end
 
     -- confirm that there is no error
@@ -111,13 +121,18 @@ function testcase.with_generic_for_loop()
     local entries = copy_entries()
 
     -- test that call walkdir with generic for loop
-    for pathname, err, entry, is_dir in walkdir('./testdir') do
+    local rootdir = './testdir'
+    for pathname, err, entry, is_dir, depth in walkdir(rootdir) do
         assert.is_string(pathname)
         assert.is_nil(err)
         assert.is_string(entry)
         assert.is_boolean(is_dir)
+        assert.is_int(depth)
         -- confirm that the entry is last part of pathname
         assert.equal(pathname:match('([^/]+)$'), entry)
+        -- confirm that the depth is correct
+        local _, count = pathname:sub(#rootdir + 1):gsub('/', '')
+        assert.equal(depth, count)
 
         -- confirm that the entry is in the expected entries
         assert.equal(entries[pathname], is_dir)
@@ -133,10 +148,12 @@ function testcase.with_walkerfn()
 
     -- test that walkdir with walker function
     local skipdir = './testdir/foo/bar/baz/qux'
-    local err = walkdir('./testdir', true, function(pathname, entry, is_dir)
+    local err = walkdir('./testdir', true,
+                        function(pathname, entry, is_dir, depth)
         assert.is_string(pathname)
         assert.is_string(entry)
         assert.is_boolean(is_dir)
+        assert.is_int(depth)
         if pathname == skipdir then
             return true -- skip skipdir
         end

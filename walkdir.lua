@@ -45,8 +45,10 @@ end
 
 --- @class walkdir.context
 --- @field dirs string[]
+--- @field depths integer[]
 --- @field follow_symlink boolean
 --- @field pathname string?
+--- @field depth integer?
 --- @field dir dir?
 --- @field error any
 
@@ -61,12 +63,14 @@ local function open_next_dir(ctx)
     end
 
     -- get the next directory to walk
+    ctx.depth = ctx.depths[#ctx.depths]
     ctx.pathname = ctx.dirs[#ctx.dirs]
     if not ctx.pathname then
         -- no more directories to walk
         return
     end
     ctx.dirs[#ctx.dirs] = nil
+    ctx.depths[#ctx.depths] = nil
 
     -- open the directory
     local dir, err = opendir(ctx.pathname, ctx.follow_symlink)
@@ -115,6 +119,8 @@ local function read_next_entry(ctx)
     local pathname = ctx.pathname
     local follow_symlink = ctx.follow_symlink
     local dirs = ctx.dirs
+    local depths = ctx.depths
+    local depth = ctx.depth
     local entry
     entry, err = dir:readdir()
     while entry do
@@ -124,8 +130,9 @@ local function read_next_entry(ctx)
             if is_dir then
                 -- if the entry is a directory, add it to the stack
                 dirs[#dirs + 1] = path
+                depths[#depths + 1] = depth + 1
             end
-            return path, nil, entry, is_dir
+            return path, nil, entry, is_dir, depth
         end
         entry, err = dir:readdir()
     end
@@ -145,7 +152,7 @@ end
 --- Callback function for each directory entry.
 --- If the callback returns `false` when `isdir` is `true`, the directory
 --- will not be traversed further.
---- @alias walkdir.walkerfn fun(pathname:string, entry:string, isdir:boolean):(skipdir:boolean, err:any)
+--- @alias walkdir.walkerfn fun(pathname:string, entry:string, isdir:boolean, depth:integer):(skipdir:boolean, err:any)
 
 --- walk directory with a walker function
 --- @param ctx walkdir.context
@@ -153,7 +160,9 @@ end
 --- @return any err
 local function walkdir_with_walkerfn(ctx, walkerfn)
     -- create a context with the walker
-    local pathname, err, entry, is_dir = read_next_entry(ctx)
+    local dirs = ctx.dirs
+    local depths = ctx.depths
+    local pathname, err, entry, is_dir, depth = read_next_entry(ctx)
     while pathname do
         if err then
             -- if an error occurred, return it
@@ -163,7 +172,7 @@ local function walkdir_with_walkerfn(ctx, walkerfn)
         -- call the walker function with the current entry
         local skipdir
         ---@diagnostic disable-next-line: param-type-mismatch
-        skipdir, err = walkerfn(pathname, entry, is_dir)
+        skipdir, err = walkerfn(pathname, entry, is_dir, depth)
         if err then
             -- if the walker function returns an error, return it
             return errorf('walkerfn failed for %s', pathname, err)
@@ -172,11 +181,12 @@ local function walkdir_with_walkerfn(ctx, walkerfn)
         -- if the walker function returns false for a directory,
         -- do not traverse it further and remove it from the stack
         if is_dir and skipdir == true then
-            ctx.dirs[#ctx.dirs] = nil
+            dirs[#dirs] = nil
+            depths[#depths] = nil
         end
 
         -- read next entry
-        pathname, err, entry, is_dir = read_next_entry(ctx)
+        pathname, err, entry, is_dir, depth = read_next_entry(ctx)
     end
 
     return err
@@ -210,6 +220,9 @@ local function walkdir(pathname, follow_symlink, walkerfn)
     local ctx = {
         dirs = {
             pathname,
+        },
+        depths = {
+            1,
         },
         follow_symlink = follow_symlink == true,
     }
