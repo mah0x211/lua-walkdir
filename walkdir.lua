@@ -90,38 +90,42 @@ local DOT_ENTRIES = {
 
 --- read next entry from the current directory.
 --- if an error occurs during traversal, the iterator returns an empty string
---- `''`, `nil`, `nil`, and the error object.
---- On subsequent calls, it consistently returns `nil`, `nil`, `nil`, and the
---- same error object.
+--- `''`, `nil`, `nil`, `nil` and the error object.
+--- On subsequent calls, it consistently returns `nil`, `nil`, `nil`, `nil` and
+--- the same error object.
 --- @param ctx walkdir.context
 --- @return string? pathname
+--- @return any err
 --- @return string? entry
 --- @return boolean? is_dir
---- @return any err
+--- @return integer? depth
 local function read_next_entry(ctx)
     if ctx.error then
         -- just return the error if it exists
-        return nil, nil, nil, ctx.error
+        return nil, ctx.error
     end
 
     local dir, err = open_next_dir(ctx)
     if err then
-        return '', nil, nil, err
+        return '', err
     elseif not dir then
         return
     end
 
+    local pathname = ctx.pathname
+    local follow_symlink = ctx.follow_symlink
+    local dirs = ctx.dirs
     local entry
     entry, err = dir:readdir()
     while entry do
         if not DOT_ENTRIES[entry] then
-            local pathname = ctx.pathname .. '/' .. entry
-            local is_dir = isdir(pathname, ctx.follow_symlink)
+            local path = pathname .. '/' .. entry
+            local is_dir = isdir(path, follow_symlink)
             if is_dir then
                 -- if the entry is a directory, add it to the stack
-                ctx.dirs[#ctx.dirs + 1] = pathname
+                dirs[#dirs + 1] = path
             end
-            return pathname, entry, is_dir
+            return path, nil, entry, is_dir
         end
         entry, err = dir:readdir()
     end
@@ -129,7 +133,7 @@ local function read_next_entry(ctx)
     if err then
         -- if readdir failed with error
         ctx.error = errorf('failed to readdir(%s)', ctx.pathname, err)
-        return '', nil, nil, ctx.error
+        return '', ctx.error
     end
 
     -- close it and open next directory
@@ -149,7 +153,7 @@ end
 --- @return any err
 local function walkdir_with_walkerfn(ctx, walkerfn)
     -- create a context with the walker
-    local pathname, entry, is_dir, err = read_next_entry(ctx)
+    local pathname, err, entry, is_dir = read_next_entry(ctx)
     while pathname do
         if err then
             -- if an error occurred, return it
@@ -157,8 +161,8 @@ local function walkdir_with_walkerfn(ctx, walkerfn)
         end
 
         -- call the walker function with the current entry
-        ---@diagnostic disable-next-line: param-type-mismatch
         local skipdir
+        ---@diagnostic disable-next-line: param-type-mismatch
         skipdir, err = walkerfn(pathname, entry, is_dir)
         if err then
             -- if the walker function returns an error, return it
@@ -172,7 +176,7 @@ local function walkdir_with_walkerfn(ctx, walkerfn)
         end
 
         -- read next entry
-        pathname, entry, is_dir, err = read_next_entry(ctx)
+        pathname, err, entry, is_dir = read_next_entry(ctx)
     end
 
     return err
