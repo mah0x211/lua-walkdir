@@ -40,19 +40,22 @@ Get an iterator function and context for traversing a specified directory.
 
 - `iter:function`: an iterator function that returns the next entry in the directory.
     ```
-    pathname:string, err:any, entry:string, isdir:boolean = iter(ctx:table)
+    pathname:string, err:any, entry:string, isdir:boolean, depth:integer = iter(ctx:table)
 
     * pathname: the entry's pathname.
     * err: an error object if an error occurred during traversal.
     * entry: the entry's name.
     * isdir: whether the entry is a directory.
+    * depth: the depth of the entry in the directory tree, starting from 1 for the root directory and incrementing for each subdirectory.
     ```
     - **NOTE:** if an error occurs during traversal, the iterator returns an empty string `''` and the error object. On subsequent calls, it consistently returns `nil` and the same error object.
 - `ctx:table`: a context table that contains the following fields:
     - `pathname:string`: the current pathname of the directory being traversed.
+    - `depth:integer`: the current depth in the directory tree, starting from 1 for the root directory and incrementing for each subdirectory.
     - `follow_symlink:boolean`: whether symbolic links are followed.
     - `error:any`: an error object if an error occurred during traversal.
     - `dirs:string[]`: a list of directories that will be traversed.
+    - `depths:integer[]`: a list of depths corresponding to the directories in `dirs`.    
     - `dir:dir`: a directory object that created by `lua-opendir` module.
         - https://github.com/mah0x211/lua-opendir
 
@@ -65,19 +68,19 @@ local walkdir = require('walkdir')
 
 -- get an iterator function and context for traversing a /tmp directory
 local iter, ctx = walkdir('/tmp', true)
-local pathname, err, entry, isdir = iter(ctx)
+local pathname, err, entry, isdir, depth = iter(ctx)
 while pathname do
-    print(pathname, err, entry, isdir)
+    print(pathname, err, entry, isdir, depth)
     if err then
         print('Error:', err)
     end
     -- read next entry
-    pathname, err, entry, isdir = iter(ctx)
+    pathname, err, entry, isdir, depth = iter(ctx)
 end
 
 -- or using a generic for loop
-for pathname, err, entry, isdir in walkdir('/tmp', true) do
-    print(pathname, err, entry, isdir)
+for pathname, err, entry, isdir, depth in walkdir('/tmp', true) do
+    print(pathname, err, entry, isdir, depth)
     if err then
         print('Error:', err)
     end
@@ -94,12 +97,13 @@ If `walkerfn` is provided, the function will traverse the directory and call the
 
 - `walkerfn:function`: a function that will be called for each entry in the directory.
     ```
-    walkerfn(pathname:string, entry:string, isdir:boolean):(skipdir:boolean, err:any)
+    walkerfn(pathname:string, entry:string, isdir:boolean, depth:integer):(skipdir:boolean, err:any)
 
     Parameters:
     * pathname: the entry's pathname.
     * entry: the entry's name.
     * isdir: whether the entry is a directory.
+    * depth: the depth of the entry in the directory tree, starting from 1 for the root directory and incrementing for each subdirectory.
 
     Returns:
     * skipdir: If `true`, the directory will not be traversed further, otherwise it will be traversed.
@@ -118,14 +122,13 @@ the following example shows how to use the `walkdir` function to traverse a dire
 local walkdir = require('walkdir')
 
 -- traverse a /tmp directory and call the walker function for each entry
-local err = walkdir('/tmp', true, function(pathname, entry, isdir)
-    print(pathname, entry, isdir)
-    -- if the entry is a directory, return true to traverse it further
-    if isdir then
+local err = walkdir('/tmp', true, function(pathname, entry, isdir, depth)
+    print(pathname, entry, isdir, depth)
+    -- if the entry is a directory and only want to traverse directories up to depth 2
+    if isdir and depth == 2 then
+        -- skip traversing this directory
         return true
     end
-    -- if the entry is a file, return false to not traverse it further
-    return false
 end)
 if err then
     print('Error:', err)
