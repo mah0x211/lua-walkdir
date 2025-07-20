@@ -80,7 +80,7 @@ function testcase.call_iterator_function()
 
     -- test that the iterator function returns entries in the directory
     local entries = copy_entries()
-    local pathname, entry, is_dir, err = iter(ctx)
+    local pathname, err, entry, is_dir = iter(ctx)
     while pathname do
         assert.is_string(pathname)
         assert.is_string(entry)
@@ -94,7 +94,7 @@ function testcase.call_iterator_function()
         entries[pathname] = nil
 
         -- get next entry
-        pathname, entry, is_dir, err = iter(ctx)
+        pathname, err, entry, is_dir = iter(ctx)
     end
 
     -- confirm that there is no error
@@ -111,8 +111,9 @@ function testcase.with_generic_for_loop()
     local entries = copy_entries()
 
     -- test that call walkdir with generic for loop
-    for pathname, entry, is_dir in walkdir('./testdir') do
+    for pathname, err, entry, is_dir in walkdir('./testdir') do
         assert.is_string(pathname)
+        assert.is_nil(err)
         assert.is_string(entry)
         assert.is_boolean(is_dir)
         -- confirm that the entry is last part of pathname
@@ -177,30 +178,30 @@ end
 function testcase.pathname_that_does_not_exist()
     -- test that iterator returns nil when pathname does not exist
     local iter, ctx = walkdir('./unknown_dir')
-    local pathname, entry, is_dir, err = iter(ctx)
+    local pathname, err, entry, is_dir = iter(ctx)
     assert.is_nil(pathname)
+    assert.is_nil(err)
     assert.is_nil(entry)
     assert.is_nil(is_dir)
-    assert.is_nil(err)
 end
 
 function testcase.pathname_that_is_not_a_directory()
     -- test that iterator returns error when pathname is not a directory
     local iter, ctx = walkdir('./testdir/1.txt')
-    local pathname, entry, is_dir, err = iter(ctx)
+    local pathname, err, entry, is_dir = iter(ctx)
     assert.equal(pathname, '')
+    assert.match(err, 'ENOTDIR')
     assert.is_nil(entry)
     assert.is_nil(is_dir)
-    assert.match(err, 'ENOTDIR')
 
     -- test that iterator returns only same error on subsequent calls
     for _ = 1, 3 do
         local err2
-        pathname, entry, is_dir, err2 = iter(ctx)
+        pathname, err2, entry, is_dir = iter(ctx)
         assert.is_nil(pathname)
+        assert.equal(err, err2)
         assert.is_nil(entry)
         assert.is_nil(is_dir)
-        assert.equal(err, err2)
     end
 end
 
