@@ -137,19 +137,23 @@ function testcase.with_walkerfn()
         assert.is_string(entry)
         assert.is_boolean(is_dir)
         if pathname == skipdir then
-            return false -- skip skipdir
+            return true -- skip skipdir
         end
         -- remove pathname
         entries[pathname] = nil
-        return true
     end)
     assert.is_nil(err)
-
     -- confirm that the skipped directory is exists
     for pathname in pairs(entries) do
         local basedir = string.sub(pathname, 1, #skipdir)
         assert.equal(basedir, skipdir)
     end
+
+    -- test that the walkerfn returns an error
+    err = walkdir('./testdir', true, function()
+        return nil, 'error in walkerfn'
+    end)
+    assert.match(err, 'error in walkerfn')
 
     -- test that throws error when walkerfn is not a function
     err = assert.throws(walkdir, './testdir', true, 123)
