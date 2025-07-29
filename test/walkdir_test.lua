@@ -85,13 +85,14 @@ function testcase.call_iterator_function()
 
     -- test that the iterator function returns entries in the directory
     local entries = copy_entries()
-    local pathname, err, entry, is_dir, depth = iter(ctx)
+    local pathname, err, entry, is_dir, depth, stat = iter(ctx)
     while pathname do
         assert.is_string(pathname)
         assert.is_nil(err)
         assert.is_string(entry)
         assert.is_boolean(is_dir)
         assert.is_int(depth)
+        assert.is_table(stat)
         -- confirm that the entry is last part of pathname
         assert.equal(pathname:match('([^/]+)$'), entry)
 
@@ -122,12 +123,13 @@ function testcase.with_generic_for_loop()
 
     -- test that call walkdir with generic for loop
     local rootdir = './testdir'
-    for pathname, err, entry, is_dir, depth in walkdir(rootdir) do
+    for pathname, err, entry, is_dir, depth, stat in walkdir(rootdir) do
         assert.is_string(pathname)
         assert.is_nil(err)
         assert.is_string(entry)
         assert.is_boolean(is_dir)
         assert.is_int(depth)
+        assert.is_table(stat)
         -- confirm that the entry is last part of pathname
         assert.equal(pathname:match('([^/]+)$'), entry)
         -- confirm that the depth is correct
@@ -149,11 +151,12 @@ function testcase.with_walkerfn()
     -- test that walkdir with walker function
     local skipdir = './testdir/foo/bar/baz/qux'
     local err = walkdir('./testdir', true,
-                        function(pathname, entry, is_dir, depth)
+                        function(pathname, entry, is_dir, depth, stat)
         assert.is_string(pathname)
         assert.is_string(entry)
         assert.is_boolean(is_dir)
         assert.is_int(depth)
+        assert.is_table(stat)
         if pathname == skipdir then
             return true -- skip skipdir
         end
@@ -195,30 +198,36 @@ end
 function testcase.pathname_that_does_not_exist()
     -- test that iterator returns nil when pathname does not exist
     local iter, ctx = walkdir('./unknown_dir')
-    local pathname, err, entry, is_dir = iter(ctx)
+    local pathname, err, entry, is_dir, depth, stat = iter(ctx)
     assert.is_nil(pathname)
     assert.is_nil(err)
     assert.is_nil(entry)
     assert.is_nil(is_dir)
+    assert.is_nil(depth)
+    assert.is_nil(stat)
 end
 
 function testcase.pathname_that_is_not_a_directory()
     -- test that iterator returns error when pathname is not a directory
     local iter, ctx = walkdir('./testdir/1.txt')
-    local pathname, err, entry, is_dir = iter(ctx)
+    local pathname, err, entry, is_dir, depth, stat = iter(ctx)
     assert.equal(pathname, '')
     assert.match(err, 'ENOTDIR')
     assert.is_nil(entry)
     assert.is_nil(is_dir)
+    assert.is_nil(depth)
+    assert.is_nil(stat)
 
     -- test that iterator returns only same error on subsequent calls
     for _ = 1, 3 do
         local err2
-        pathname, err2, entry, is_dir = iter(ctx)
+        pathname, err2, entry, is_dir, depth, stat = iter(ctx)
         assert.is_nil(pathname)
         assert.equal(err, err2)
         assert.is_nil(entry)
         assert.is_nil(is_dir)
+        assert.is_nil(depth)
+        assert.is_nil(stat)
     end
 end
 

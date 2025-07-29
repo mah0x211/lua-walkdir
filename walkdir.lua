@@ -29,14 +29,23 @@ local fatalf = require('error.fatalf')
 local errorf = require('error').format
 local ENOENT = require('errno').ENOENT
 
+--- @alias fstat.stat table
+--- @alias fstat fun(pathname:string, follow_symlink:boolean):(stat:fstat.stat, err:any)
+
 --- check if a directory exists and is a directory
 --- @param pathname string
 --- @param follow_symlink boolean
 --- @return boolean isdir
+--- @return fstat.stat?
 local function isdir(pathname, follow_symlink)
     -- check type of entry
-    local stat = fstat(pathname, follow_symlink)
-    return stat and stat.type == 'directory' or false
+    local stat, err = fstat(pathname, follow_symlink)
+    if stat then
+        return stat.type == 'directory', stat
+    end
+    return false, {
+        error = err,
+    }
 end
 
 --- @class dir
@@ -103,6 +112,7 @@ local DOT_ENTRIES = {
 --- @return string? entry
 --- @return boolean? is_dir
 --- @return integer? depth
+--- @return fstat.stat? stat
 local function read_next_entry(ctx)
     if ctx.error then
         -- just return the error if it exists
@@ -126,13 +136,13 @@ local function read_next_entry(ctx)
     while entry do
         if not DOT_ENTRIES[entry] then
             local path = pathname .. '/' .. entry
-            local is_dir = isdir(path, follow_symlink)
+            local is_dir, stat = isdir(path, follow_symlink)
             if is_dir then
                 -- if the entry is a directory, add it to the stack
                 dirs[#dirs + 1] = path
                 depths[#depths + 1] = depth + 1
             end
-            return path, nil, entry, is_dir, depth
+            return path, nil, entry, is_dir, depth, stat
         end
         entry, err = dir:readdir()
     end
@@ -152,7 +162,7 @@ end
 --- Callback function for each directory entry.
 --- If the callback returns `false` when `isdir` is `true`, the directory
 --- will not be traversed further.
---- @alias walkdir.walkerfn fun(pathname:string, entry:string, isdir:boolean, depth:integer):(skipdir:boolean, err:any)
+--- @alias walkdir.walkerfn fun(pathname:string, entry:string, isdir:boolean, depth:integer, stat:fstat.stat?):(skipdir:boolean, err:any)
 
 --- walk directory with a walker function
 --- @param ctx walkdir.context
@@ -162,7 +172,7 @@ local function walkdir_with_walkerfn(ctx, walkerfn)
     -- create a context with the walker
     local dirs = ctx.dirs
     local depths = ctx.depths
-    local pathname, err, entry, is_dir, depth = read_next_entry(ctx)
+    local pathname, err, entry, is_dir, depth, stat = read_next_entry(ctx)
     while pathname do
         if err then
             -- if an error occurred, return it
@@ -172,7 +182,7 @@ local function walkdir_with_walkerfn(ctx, walkerfn)
         -- call the walker function with the current entry
         local skipdir
         ---@diagnostic disable-next-line: param-type-mismatch
-        skipdir, err = walkerfn(pathname, entry, is_dir, depth)
+        skipdir, err = walkerfn(pathname, entry, is_dir, depth, stat)
         if err then
             -- if the walker function returns an error, return it
             return errorf('walkerfn failed for %s', pathname, err)
@@ -186,13 +196,13 @@ local function walkdir_with_walkerfn(ctx, walkerfn)
         end
 
         -- read next entry
-        pathname, err, entry, is_dir, depth = read_next_entry(ctx)
+        pathname, err, entry, is_dir, depth, stat = read_next_entry(ctx)
     end
 
     return err
 end
 
---- @alias walkdir.iterator fun(ctx:walkdir.context):(pathname:string?, entry:string?, isdir:boolean?, err:any)
+--- @alias walkdir.iterator fun(ctx:walkdir.context):(pathname:string?, err:any, entry:string?, isdir:boolean?, depth:integer?, fstat:fstat.stat?)
 
 --- walk directory recursively
 --- @param pathname string
