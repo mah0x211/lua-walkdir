@@ -40,15 +40,21 @@ Get an iterator function and context for traversing a specified directory.
 
 - `iter:function`: an iterator function that returns the next entry in the directory.
     ```
-    pathname:string, err:any, entry:string, isdir:boolean, depth:integer = iter(ctx:table)
+    pathname:string, err:any, entry:string, isdir:boolean, depth:integer, stat:table = iter(ctx:table)
 
-    * pathname: the entry's pathname.
-    * err: an error object if an error occurred during traversal.
-    * entry: the entry's name.
-    * isdir: whether the entry is a directory.
-    * depth: the depth of the entry in the directory tree, starting from 1 for the root directory and incrementing for each subdirectory.
+    * pathname  : the entry's pathname.
+    * err       : an error object if an error occurred during traversal.
+    * entry     : the entry's name.
+    * isdir     : whether the entry is a directory.
+    * depth     : the depth of the entry in the directory tree, starting from 1 
+                  for the root directory and incrementing for each subdirectory.
+    * stat      : a table containing file status information (e.g., size, 
+                  modification time). if fail to get the file stat, it contains 
+                  an `error` field with the error object.
     ```
-    - **NOTE:** if an error occurs during traversal, the iterator returns an empty string `''` and the error object. On subsequent calls, it consistently returns `nil` and the same error object.
+    - **NOTE:** if an error occurs during traversal, the iterator returns an 
+                empty string `''` and the error object. On subsequent calls, 
+                it consistently returns `nil` and the same error object.
 - `ctx:table`: a context table that contains the following fields:
     - `pathname:string`: the current pathname of the directory being traversed.
     - `depth:integer`: the current depth in the directory tree, starting from 1 for the root directory and incrementing for each subdirectory.
@@ -68,19 +74,19 @@ local walkdir = require('walkdir')
 
 -- get an iterator function and context for traversing a /tmp directory
 local iter, ctx = walkdir('/tmp', true)
-local pathname, err, entry, isdir, depth = iter(ctx)
+local pathname, err, entry, isdir, depth, stat = iter(ctx)
 while pathname do
-    print(pathname, err, entry, isdir, depth)
+    print(pathname, err, entry, isdir, depth, stat)
     if err then
         print('Error:', err)
     end
     -- read next entry
-    pathname, err, entry, isdir, depth = iter(ctx)
+    pathname, err, entry, isdir, depth, stat = iter(ctx)
 end
 
 -- or using a generic for loop
-for pathname, err, entry, isdir, depth in walkdir('/tmp', true) do
-    print(pathname, err, entry, isdir, depth)
+for pathname, err, entry, isdir, depth, stat in walkdir('/tmp', true) do
+    print(pathname, err, entry, isdir, depth, stat)
     if err then
         print('Error:', err)
     end
@@ -97,17 +103,24 @@ If `walkerfn` is provided, the function will traverse the directory and call the
 
 - `walkerfn:function`: a function that will be called for each entry in the directory.
     ```
-    walkerfn(pathname:string, entry:string, isdir:boolean, depth:integer):(skipdir:boolean, err:any)
+    walkerfn(pathname:string, entry:string, isdir:boolean, depth:integer, stat:table):(skipdir:boolean, err:any)
 
     Parameters:
-    * pathname: the entry's pathname.
-    * entry: the entry's name.
-    * isdir: whether the entry is a directory.
-    * depth: the depth of the entry in the directory tree, starting from 1 for the root directory and incrementing for each subdirectory.
+    * pathname  : the entry's pathname.
+    * entry     : the entry's name.
+    * isdir     : whether the entry is a directory.
+    * depth     : the depth of the entry in the directory tree, starting from 1 
+                  for the root directory and incrementing for each subdirectory.
+    * stat      : a table containing file status information (e.g., size, 
+                  modification time). if fail to get the file stat, it contains 
+                  an `error` field with the error object.
 
     Returns:
-    * skipdir: If `true`, the directory will not be traversed further, otherwise it will be traversed.
-    * err: an error object if an error occurred during traversal. If an error returned, the traversal will stop and the error will be returned by the `walkdir` function.
+    * skipdir   : If `true`, the directory will not be traversed further, 
+                  otherwise it will be traversed.
+    * err       : an error object if an error occurred during traversal. If an 
+                  error returned, the traversal will stop and the error will be 
+                  returned by the `walkdir` function.
     ```
 
 **Returns**
@@ -122,8 +135,8 @@ the following example shows how to use the `walkdir` function to traverse a dire
 local walkdir = require('walkdir')
 
 -- traverse a /tmp directory and call the walker function for each entry
-local err = walkdir('/tmp', true, function(pathname, entry, isdir, depth)
-    print(pathname, entry, isdir, depth)
+local err = walkdir('/tmp', true, function(pathname, entry, isdir, depth, stat)
+    print(pathname, entry, isdir, depth, stat)
     -- if the entry is a directory and only want to traverse directories up to depth 2
     if isdir and depth == 2 then
         -- skip traversing this directory
