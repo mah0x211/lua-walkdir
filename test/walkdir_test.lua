@@ -7,6 +7,7 @@ local walkdir = require('walkdir')
 
 local FIRST_ENTRY
 local ENTRIES = {}
+local SYMLINK_TESTDIR = './symlink_testdir'
 
 local function copy_entries()
     local copy = {}
@@ -49,6 +50,10 @@ function testcase.before_all()
     end
 
     FIRST_ENTRY = table.remove(ENTRIES, 1)
+
+    -- create a symlink to testdir for toctou tests
+    local ok = os.execute('ln -s testdir ' .. SYMLINK_TESTDIR)
+    assert(ok == true or ok == 0, 'failed to create symlink_testdir')
 end
 
 function testcase.after_all()
@@ -61,6 +66,8 @@ function testcase.after_all()
     if FIRST_ENTRY then
         assert(os.remove(FIRST_ENTRY))
     end
+
+    os.remove(SYMLINK_TESTDIR)
 end
 
 function testcase.call_iterator_function()
@@ -72,6 +79,7 @@ function testcase.call_iterator_function()
         pathname = nil,
         depth = nil,
         follow_symlink = true,
+        toctou = false,
         dirs = {
             './testdir',
         },
@@ -247,4 +255,55 @@ function testcase.throw_error_on_invalid_argument()
     -- test that throws error with non-boolean follow_symlink argument
     err = assert.throws(walkdir, './testdir', 123)
     assert.match(err, 'follow_symlink must be a boolean, got number')
+
+    -- test that throws error when walkerfn is not a function
+    err = assert.throws(walkdir, './testdir', true, 123)
+    assert.match(err, 'walkerfn must be a function, got number')
+
+    -- test that throws error with non-boolean toctou argument
+    err = assert.throws(walkdir, './testdir', false, nil, 123)
+    assert.match(err, 'toctou must be a boolean, got number')
+end
+
+function testcase.with_toctou_iterator()
+    -- test that walkdir passes toctou to opendir for real directories
+    local iter, ctx = walkdir('./testdir', false, nil, true)
+    assert.is_func(iter)
+    assert.is_true(ctx.toctou)
+
+    -- test that traversal works normally when no symlinks are in the path
+    local entries = copy_entries()
+    for pathname, err in iter, ctx do
+        assert.is_nil(err)
+        entries[pathname] = nil
+    end
+    assert.empty(entries)
+end
+
+function testcase.with_toctou_and_walkerfn()
+    -- test that toctou works together with a walkerfn
+    local entries = copy_entries()
+    local err = walkdir('./testdir', false, function(pathname)
+        entries[pathname] = nil
+    end, true)
+    assert.is_nil(err)
+    assert.empty(entries)
+end
+
+function testcase.toctou_rejects_intermediate_symlink()
+    -- test that toctou=false follows an intermediate symlink (default behavior):
+    -- symlink_testdir is a symlink to testdir, so symlink_testdir/foo is
+    -- reachable via an intermediate symlink
+    local iter, ctx = walkdir(SYMLINK_TESTDIR .. '/foo', false, nil, false)
+    local pathname, err = iter(ctx)
+    assert.is_nil(err)
+    assert.is_string(pathname)
+
+    -- test that toctou=true rejects an intermediate symlink:
+    -- opendir(symlink_testdir/foo, false, true) fails because symlink_testdir
+    -- is a symlink at an intermediate position in the path
+    iter, ctx = walkdir(SYMLINK_TESTDIR .. '/foo', false, nil, true)
+    pathname, err = iter(ctx)
+    assert.equal(pathname, '')
+    assert.match(err, 'ENOTDIR')
 end

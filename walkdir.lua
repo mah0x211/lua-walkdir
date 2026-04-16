@@ -56,6 +56,7 @@ end
 --- @field dirs string[]
 --- @field depths integer[]
 --- @field follow_symlink boolean
+--- @field toctou boolean
 --- @field pathname string?
 --- @field depth integer?
 --- @field dir dir?
@@ -82,7 +83,7 @@ local function open_next_dir(ctx)
     ctx.depths[#ctx.depths] = nil
 
     -- open the directory
-    local dir, err = opendir(ctx.pathname, ctx.follow_symlink)
+    local dir, err = opendir(ctx.pathname, ctx.follow_symlink, ctx.toctou)
     if dir then
         ctx.dir = dir
         return dir
@@ -208,9 +209,10 @@ end
 --- @param pathname string
 --- @param follow_symlink boolean?
 --- @param walkerfn walkdir.walkerfn?
+--- @param toctou boolean?
 --- @return walkdir.iterator|any
 --- @return walkdir.context?
-local function walkdir(pathname, follow_symlink, walkerfn)
+local function walkdir(pathname, follow_symlink, walkerfn, toctou)
     if type(pathname) ~= 'string' or find(pathname, '^%s*$') then
         fatalf(2, 'pathname must be a non-empty string, got %s', type(pathname))
     elseif follow_symlink ~= nil and type(follow_symlink) ~= 'boolean' then
@@ -218,6 +220,8 @@ local function walkdir(pathname, follow_symlink, walkerfn)
                type(follow_symlink))
     elseif walkerfn ~= nil and type(walkerfn) ~= 'function' then
         fatalf(2, 'walkerfn must be a function, got %s', type(walkerfn))
+    elseif toctou ~= nil and type(toctou) ~= 'boolean' then
+        fatalf(2, 'toctou must be a boolean, got %s', type(toctou))
     end
 
     -- remove double slashes and trailing slashes
@@ -235,6 +239,7 @@ local function walkdir(pathname, follow_symlink, walkerfn)
             1,
         },
         follow_symlink = follow_symlink == true,
+        toctou = toctou == true,
     }
 
     if walkerfn then
