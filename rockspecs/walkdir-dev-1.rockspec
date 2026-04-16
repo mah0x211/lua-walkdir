@@ -14,7 +14,7 @@ dependencies = {
     "error >= 0.15.0",
     "errno >= 0.5.0",
     "fstat >= 0.2.3",
-    "opendir >= 0.2.2",
+    "opendir >= 0.3.0",
 }
 build = {
     type = "builtin",
